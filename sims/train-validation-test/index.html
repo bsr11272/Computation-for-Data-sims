@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An interactive introduction to train, validation, and test data splits.">
+  <title>Split the Evidence · Computation for Data</title>
+  <style>
+    :root {
+      --ink: #102a43;
+      --muted: #52606d;
+      --paper: #f7fafc;
+      --white: #ffffff;
+      --line: #bcccdc;
+      --data: #147d92;
+      --data-soft: #d9f0f2;
+      --signal: #f59e0b;
+      --signal-soft: #fff3cd;
+      --valid: #2f855a;
+      --valid-soft: #def7e5;
+      --shadow: 0 18px 45px rgba(16, 42, 67, 0.13);
+    }
+
+    * { box-sizing: border-box; }
+    html { color-scheme: light; }
+    body {
+      margin: 0;
+      background:
+        linear-gradient(rgba(20, 125, 146, 0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20, 125, 146, 0.055) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+
+    button, input { font: inherit; }
+    button:focus-visible, input:focus-visible {
+      outline: 4px solid rgba(20, 125, 146, 0.28);
+      outline-offset: 3px;
+    }
+
+    .shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 48px; }
+    .masthead {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      padding: clamp(24px, 5vw, 54px);
+      border: 1px solid var(--line);
+      border-top: 8px solid var(--data);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--data);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    h1, h2 { font-family: Georgia, "Times New Roman", serif; line-height: 1.08; }
+    h1 { max-width: 760px; margin: 0; font-size: clamp(2.15rem, 6vw, 4.8rem); }
+    h2 { margin: 0 0 10px; font-size: clamp(1.45rem, 3vw, 2.05rem); }
+    .lede { max-width: 720px; margin: 18px 0 0; color: var(--muted); font-size: 1.08rem; }
+    .stamp {
+      width: 126px;
+      padding: 12px;
+      transform: rotate(2deg);
+      border: 3px double var(--data);
+      color: var(--data);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .lab {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.55fr);
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.97);
+      box-shadow: 0 10px 24px rgba(16, 42, 67, 0.08);
+    }
+    .controls { padding: 24px; }
+    .controls p { color: var(--muted); }
+    .control { margin: 26px 0; }
+    .control-head { display: flex; justify-content: space-between; gap: 16px; font-weight: 700; }
+    .control-head output { color: var(--data); font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--data); }
+    .hint { margin: 8px 0 0; font-size: 0.86rem; }
+    .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .preset {
+      padding: 8px 11px;
+      border: 1px solid var(--ink);
+      border-radius: 999px;
+      background: var(--white);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .preset:hover { background: var(--data-soft); }
+    .rule {
+      margin-top: 24px;
+      padding: 14px 16px;
+      border-left: 5px solid var(--signal);
+      background: var(--signal-soft);
+      font-size: 0.94rem;
+    }
+
+    .evidence { overflow: hidden; }
+    .scoreboard {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-bottom: 1px solid var(--line);
+    }
+    .score { min-width: 0; padding: 18px; }
+    .score + .score { border-left: 1px solid var(--line); }
+    .score strong { display: block; font-family: Georgia, serif; font-size: 1.9rem; font-variant-numeric: tabular-nums; }
+    .score span { font-size: 0.8rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .score.train { background: var(--data-soft); }
+    .score.valid { background: var(--signal-soft); }
+    .score.test { background: var(--valid-soft); }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(18px, 1fr));
+      gap: 7px;
+      min-height: 352px;
+      padding: 24px;
+      align-content: start;
+    }
+    .card {
+      aspect-ratio: 1;
+      border: 1px solid rgba(16, 42, 67, 0.25);
+      border-radius: 4px;
+      transition: background 180ms ease, transform 180ms ease;
+    }
+    .card:hover { transform: translateY(-2px); }
+    .card.train { background: var(--data); }
+    .card.valid { background: repeating-linear-gradient(135deg, var(--signal), var(--signal) 5px, #ffd166 5px, #ffd166 10px); }
+    .card.test { background: radial-gradient(circle, #e8f8ed 24%, var(--valid) 27%, var(--valid) 55%, #e8f8ed 58%); background-size: 12px 12px; }
+
+    .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 24px; }
+    .role { padding: 20px; border: 1px solid var(--line); background: var(--white); }
+    .role::before { display: block; margin-bottom: 8px; font-size: 1.35rem; }
+    .role.train::before { content: "✎"; color: var(--data); }
+    .role.valid::before { content: "↻"; color: #9a6500; }
+    .role.test::before { content: "✓"; color: var(--valid); }
+    .role h2 { font-size: 1.3rem; }
+    .role p { margin: 0; color: var(--muted); }
+
+    .challenge { margin-top: 24px; padding: clamp(22px, 4vw, 34px); }
+    .challenge-options { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    .challenge button {
+      padding: 10px 14px;
+      border: 1px solid var(--ink);
+      background: var(--white);
+      cursor: pointer;
+    }
+    .challenge button:hover { background: var(--data-soft); }
+    #feedback { min-height: 3.5em; margin: 18px 0 0; padding: 12px 14px; border-left: 5px solid var(--line); background: var(--paper); }
+    #feedback.correct { border-color: var(--valid); background: var(--valid-soft); }
+    #feedback.rethink { border-color: var(--signal); background: var(--signal-soft); }
+    .footer { margin-top: 22px; color: var(--muted); font-size: 0.84rem; text-align: center; }
+
+    @media (max-width: 760px) {
+      .masthead, .lab { grid-template-columns: 1fr; }
+      .stamp { display: none; }
+      .roles { grid-template-columns: 1fr; }
+      .cards { gap: 4px; min-height: auto; padding: 16px; }
+      .score { padding: 12px 9px; }
+      .score strong { font-size: 1.45rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Week 1 · Interactive field note</p>
+        <h1>Split the evidence.</h1>
+        <p class="lede">A model needs examples to learn from, a private workspace for tuning decisions, and a final set of untouched evidence. Move the controls and watch 100 observations change jobs.</p>
+      </div>
+      <div class="stamp" aria-hidden="true">Evidence lab<br>Do not peek</div>
+    </header>
+
+    <section class="lab" aria-label="Data split laboratory">
+      <div class="panel controls">
+        <h2>Choose the allocation</h2>
+        <p>Each square is one observation. The three percentages must total 100.</p>
+
+        <div class="control">
+          <div class="control-head"><label for="train">Training data</label><output id="trainOut" for="train">70%</output></div>
+          <input id="train" type="range" min="40" max="90" step="1" value="70">
+          <p class="hint">The examples the model is allowed to learn from.</p>
+        </div>
+
+        <div class="control">
+          <div class="control-head"><label for="validation">Validation data</label><output id="validationOut" for="validation">15%</output></div>
+          <input id="validation" type="range" min="5" max="40" step="1" value="15">
+          <p class="hint">The examples used to compare choices while developing.</p>
+        </div>
+
+        <div class="control-head" aria-live="polite"><span>Test data (remainder)</span><output id="testOut">15%</output></div>
+        <div class="presets" aria-label="Common split presets">
+          <button class="preset" type="button" data-train="60" data-valid="20">60 / 20 / 20</button>
+          <button class="preset" type="button" data-train="70" data-valid="15">70 / 15 / 15</button>
+          <button class="preset" type="button" data-train="80" data-valid="10">80 / 10 / 10</button>
+        </div>
+        <div class="rule"><strong>Constraint:</strong> the test set stays sealed until the important modeling choices are finished.</div>
+      </div>
+
+      <div class="panel evidence">
+        <div class="scoreboard" aria-live="polite">
+          <div class="score train"><strong id="trainCount">70</strong><span>Train · solid</span></div>
+          <div class="score valid"><strong id="validationCount">15</strong><span>Validate · stripes</span></div>
+          <div class="score test"><strong id="testCount">15</strong><span>Test · dots</span></div>
+        </div>
+        <div id="cards" class="cards" role="img" aria-label="100 observations: 70 training, 15 validation, and 15 test"></div>
+      </div>
+    </section>
+
+    <section class="roles" aria-label="The jobs of each data split">
+      <article class="role train"><h2>Train: learn</h2><p>Fit patterns and estimate model parameters. More varied training evidence usually gives the model more to learn from.</p></article>
+      <article class="role valid"><h2>Validate: decide</h2><p>Compare model settings without spending the final test. Repeated decisions can gradually overfit this set too.</p></article>
+      <article class="role test"><h2>Test: audit</h2><p>Estimate performance on unseen cases only after the development choices are settled.</p></article>
+    </section>
+
+    <section class="panel challenge" aria-labelledby="challenge-title">
+      <p class="eyebrow">Prediction check</p>
+      <h2 id="challenge-title">You tested five models and chose the winner using the test set. What happened?</h2>
+      <div class="challenge-options">
+        <button type="button" data-answer="wrong">Nothing—the test set is still unbiased</button>
+        <button type="button" data-answer="right">The test set became part of model selection</button>
+        <button type="button" data-answer="wrong">The training set became larger</button>
+      </div>
+      <p id="feedback" aria-live="polite">Choose an answer, then explain your reasoning before reading the feedback.</p>
+    </section>
+
+    <p class="footer">Computation for Data · This simulation works with a keyboard, touch, or mouse. Color, labels, and patterns all communicate the split roles.</p>
+  </main>
+
+  <script>
+    const trainInput = document.querySelector('#train');
+    const validationInput = document.querySelector('#validation');
+    const cards = document.querySelector('#cards');
+    const trainOut = document.querySelector('#trainOut');
+    const validationOut = document.querySelector('#validationOut');
+    const testOut = document.querySelector('#testOut');
+    const trainCount = document.querySelector('#trainCount');
+    const validationCount = document.querySelector('#validationCount');
+    const testCount = document.querySelector('#testCount');
+
+    for (let index = 0; index < 100; index += 1) {
+      const card = document.createElement('span');
+      card.className = 'card';
+      card.setAttribute('aria-hidden', 'true');
+      cards.appendChild(card);
+    }
+
+    function render(changed) {
+      let train = Number(trainInput.value);
+      let validation = Number(validationInput.value);
+      if (train + validation > 95) {
+        if (changed === 'train') validation = 95 - train;
+        else train = 95 - validation;
+      }
+      trainInput.value = train;
+      validationInput.value = validation;
+      const test = 100 - train - validation;
+
+      trainOut.value = `${train}%`;
+      validationOut.value = `${validation}%`;
+      testOut.value = `${test}%`;
+      trainCount.textContent = train;
+      validationCount.textContent = validation;
+      testCount.textContent = test;
+      cards.setAttribute('aria-label', `100 observations: ${train} training, ${validation} validation, and ${test} test`);
+
+      [...cards.children].forEach((card, index) => {
+        card.className = 'card ' + (index < train ? 'train' : index < train + validation ? 'valid' : 'test');
+      });
+    }
+
+    trainInput.addEventListener('input', () => render('train'));
+    validationInput.addEventListener('input', () => render('validation'));
+    document.querySelectorAll('.preset').forEach((button) => {
+      button.addEventListener('click', () => {
+        trainInput.value = button.dataset.train;
+        validationInput.value = button.dataset.valid;
+        render('preset');
+      });
+    });
+
+    document.querySelectorAll('[data-answer]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const feedback = document.querySelector('#feedback');
+        const isRight = button.dataset.answer === 'right';
+        feedback.className = isRight ? 'correct' : 'rethink';
+        feedback.textContent = isRight
+          ? 'Exactly. Once test results influence which model you keep, the test set is no longer an untouched final audit. Use validation data for those choices, then test once.'
+          : 'Reconsider the word “chose.” If a result changes which model you select, that dataset has participated in development—even if nobody trained directly on it.';
+      });
+    });
+
+    render('preset');
+  </script>
+</body>
+</html>
